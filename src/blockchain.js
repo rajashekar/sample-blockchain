@@ -113,11 +113,15 @@ class Blockchain {
         return new Promise(async (resolve, reject) => {
             let msg_time = parseInt(message.split(':')[1])
             let currentTime = parseInt(new Date().getTime().toString().slice(0, -3));
-            //if ((currentTime - msg_time)/60 > 5) {
-            //    return reject("Given message is rejected due to 5 minutes timeout")
-            //}
+            if ((currentTime - msg_time)/60 > 5) {
+                return reject("Given message is rejected due to 5 minutes timeout")
+            }
             if (!bitcoinMessage.verify(message, address, signature)) {
                 return reject("Unable to verify message")
+            }
+            let errorLog = await this.validateChain()
+            if (errorLog.length > 0) {
+                return reject("Blockchain is not valid")
             }
             let block = new BlockClass.Block({'address':address, 'star': star})
             return self._addBlock(block).then(newblock => resolve(newblock))
@@ -181,18 +185,22 @@ class Blockchain {
         let self = this;
         let errorLog = [];
         return new Promise(async (resolve, reject) => {
-           let valid = true
-           for(let i = 1; i < self.chain; i++) {
-            if (valid) {
-                let block = self.chain[i]
-                let prevBlock = self.chain[i-1]
-                if (block.previousBlockHash !== prevBlock.hash) {
-                    valid = false
-                }
-                block.validate().then(isValid => {valid = isValid})
-            } 
+           // make sure if blockchain height is more than 2 
+           if(self.chain.length > 2) {
+            for(let i = 2; i < self.chain.length; i++) {
+                    let valid = true
+                    let block = self.chain[i]
+                    let prevBlock = self.chain[i-1]
+                    if (block.previousBlockHash !== prevBlock.hash) {
+                        valid = false
+                    }
+                    valid = await block.validate().then(isValid => isValid)
+                    if(!valid) {
+                        errorLog.push(i)
+                    }
+            }
            }
-           resolve(valid)
+           return resolve(errorLog)
         });
     }
 
